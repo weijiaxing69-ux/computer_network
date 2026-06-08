@@ -1,0 +1,5 @@
+Hello World! This is a test file for TCP text reversal.
+It contains multiple lines of English ASCII text.
+Line three: ABCDEFGHIJKLMNOPQRSTUVWXYZ
+Line four: 1234567890
+Line five: The quick brown fox jumps over the lazy dog.

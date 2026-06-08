@@ -1,0 +1,32 @@
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境（几千个文件的元凶）
+venv/
+.env/
+env/
+ENV/
+
+# Mac系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# VSCode配置文件（可选，课设不需要）
+.vscode/
+*.code-workspace
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+
+# 其他
+*.swp
+*~
