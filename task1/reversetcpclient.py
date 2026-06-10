@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 TCP 客户端程序 —— 将文件分块发送到服务器进行反转，并重组结果
 
@@ -23,9 +24,8 @@ import struct
 import argparse
 import os
 
-# 日志文件名常量
-# 每个客户端使用独立的日志文件，避免多客户端同时运行时互相覆盖
-FILE_NAME = f'run_log_client_{os.getpid()}.txt'
+# 日志文件名（在 main 中解析 --seed 后重新设置）
+FILE_NAME = None
 
 
 def get_time():
@@ -128,7 +128,9 @@ def main():
     #解析传入的参数 并且存储到args对象里面
     args = parser.parse_args()
 
-    # 如果日志文件已存在，先删除
+    # 设置日志文件名（使用 seed 区分不同客户端）
+    global FILE_NAME
+    FILE_NAME = f'run_log_client_seed{args.seed}.txt'
     if os.path.exists(FILE_NAME):
         os.remove(FILE_NAME)
 
@@ -205,7 +207,7 @@ def main():
     all_reversed = b''.join(reversed_blocks)
     #文件名和后缀名分开
     base, ext = os.path.splitext(args.file)
-    output_filename = base + '_reversed' + ext
+    output_filename = f'{base}_reversed_seed{args.seed}{ext}'
     with open(output_filename, 'wb') as f:
         f.write(all_reversed)
     print(f'reversed file saved as: {output_filename}')

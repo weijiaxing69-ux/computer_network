@@ -2,7 +2,7 @@
 
 一、运行环境
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  操作系统  : macOS 15 (Darwin Kernel 24.5.0, ARM64)
+  操作系统  : macOS 15 (Darwin Kernel 24.5.0, ARM64)+Windows 11 Pro（内核版本 NT 10.0，内部版本号 26100）
   Python    : 3.12.13
   依赖模块  : 仅使用 Python 标准库（无需额外安装）
               - socket（TCP 网络通信）
