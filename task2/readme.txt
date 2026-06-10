@@ -2,7 +2,7 @@
 
 一、运行环境
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  操作系统  : macOS 15 (Darwin Kernel 24.5.0, ARM64)
+  操作系统  : macOS 15 (Darwin Kernel 24.5.0, ARM64) + Windows 11 Pro（内核版本 NT 10.0，内部版本号 26100）
   Python    : 3.12.13
   依赖模块  : 除 Python 标准库外，还需安装 pandas
               - socket（UDP 网络通信）
@@ -16,30 +16,38 @@
 
 二、文件说明
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  udpserver.py          — UDP GBN 服务器程序
-  udpclient.py          — UDP GBN 客户端程序
-  test.txt              — 测试用文本文件
-  run_log_udp.txt       — 运行日志（程序自动生成）
-  readme.txt            — 本说明文档
+  udpserver.py            — UDP GBN 服务器程序
+  udpclient.py            — UDP GBN 客户端程序
+  test.txt                — 测试用文本文件
+  run_log.txt             — 运行日志（程序自动生成）
+  received_{ip}_{port}.bin — 服务端保存的接收数据（程序自动生成）
+  readme.txt              — 本说明文档
 
 三、程序概述
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  基于 UDP 实现 GBN（Go-Back-N）可靠传输协议：
+  基于 UDP 实现 GBN（Go-Back-N）可靠传输协议，模拟 TCP 的可靠传输机制：
 
   客户端：
-    • 将数据拆分为多个数据包（每包 40~80 字节）
-    • 采用滑动窗口（窗口大小 400 字节）连续发送
-    • 超时（300ms）时重传窗口内所有未确认包
+    • 与服务器完成三次握手（SYN → SYN+ACK → ACK）后进入数据传输阶段
+    • 将数据拆分为多个数据包（每包数据 40~80 字节）
+    • 采用滑动窗口（窗口上限 400 字节，含 13B 头部）连续发送
+    • 主重传机制：快重传（收到 3 次重复 ACK 时只重传 base 包）
+    • 备份机制：超时（300ms）时回退 N 步，重传窗口内所有包
+    • 单包数据长度 40~80 字节随机生成
     • 统计 RTT（最大/最小/平均/标准差）和丢包率
-    • 连接请求也支持超时重传（循环等待直到收到 Type=1 确认）
-    • 使用固定随机种子（seed=42），保证数据块生成可复现
+    • 三次握手和四次挥手均支持超时重传（最多 15 次）
+    • 使用固定随机种子（seed=42，可命令行覆盖），保证数据块生成可复现
+    • 窗口大小、超时时间、数据范围、总包数均可通过命令行配置
 
   服务器：
     • 监听 0.0.0.0（所有网络接口），接收 UDP 数据包
-    • 接收数据包，模拟随机丢包（默认丢包率 0.3，在回复 ACK 前随机丢弃）
-    • 按序到达则累积确认，乱序到达则发送重复 ACK
-    • 使用 expect_seq 字典按客户端地址跟踪期望的下一个序号
+    • 启动时自动获取本机 IP 并打印，方便客户端连接
+    • 所有 client→server 报文参与丢包模拟（默认丢包率 0.3，随机丢弃不回复）
+    • 接收窗口 = 1，按序到达则累积确认并保存数据，乱序到达则发送重复 ACK
+    • ACK 数据段携带服务端系统时间（格式 hh-mm-ss.sss，毫秒精度）
     • 使用学号异或加密（XOR 0x5A3C）验证客户端身份
+    • 连接断开（收到 FIN）时自动保存接收数据到文件 received_{ip}_{port}.bin
+    • 支持设置随机种子，用于复现丢包场景
     • 使用 Ctrl+C（KeyboardInterrupt）关闭服务器
 
 四、自定义协议格式
@@ -49,84 +57,134 @@
 
   首部格式（!HBIIH）:
     字段       类型      字节  说明
-    student_id  H (uint16)  2  学号（后4位 XOR 0x5A3C 加密）
-    msg_type    B (uint8)   1  报文类型（0/1/2/3）
+    student_id  H (uint16)  2  学号后4位 XOR 0x5A3C 加密
+    msg_type    B (uint8)   1  报文类型（0/1/2/3/4/5）
     seq         I (uint32)  4  序列号
     ack         I (uint32)  4  确认号
     length      H (uint16)  2  数据载荷长度
 
   报文类型：
-    Type 0  — 连接请求（客户端 → 服务器）
-    Type 1  — 连接确认（服务器 → 客户端）
+    Type 0  — 连接请求 SYN（客户端 → 服务器）
+    Type 1  — 连接确认 SYN+ACK（服务器 → 客户端）
     Type 2  — 数据报文（客户端 → 服务器）
-    Type 3  — ACK 确认（服务器 → 客户端，Ack 字段携带累积确认号）
+    Type 3  — ACK 确认（双向，Ack 字段携带累积确认号）
+    Type 4  — 断开请求 FIN（客户端 → 服务器）
+    Type 5  — 断开确认 FIN+ACK（服务器 → 客户端）
 
-五、服务器命令行参数
+五、三次握手流程
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  --port         端口号（必需）              示例: --port 8888
-  --loss_rate    模拟丢包率（可选，默认0.3）  示例: --loss_rate 0.2
+  客户端                               服务器
+    │                                    │
+    │──── Type=0 (seq=0, ack=0) ──────→│ ① SYN
+    │←─── Type=1 (seq=0, ack=0) ───────│ ② SYN+ACK
+    │──── Type=3 (seq=0, ack=1) ──────→│ ③ ACK（三次握手完成）
+    │                                    │
+
+  连接请求支持超时重传，超过 MAX_RETRIES(15) 次后放弃连接。
+
+六、四次挥手流程
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  客户端                               服务器
+    │                                    │
+    │──── Type=4 (seq=0, ack=0) ──────→│ ① FIN
+    │←─── Type=5 (seq=0, ack=1) ───────│ ② FIN+ACK
+    │──── Type=3 (seq=0, ack=1) ──────→│ ③ ACK（挥手完成）
+    │                                    │
+
+  挥手支持超时重传，超过 MAX_RETRIES(15) 次后直接关闭。
+
+七、快重传 + 超时重传双机制
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  主机制 ─ 快重传（立即恢复）:
+    收到 3 次重复 ACK → 判定丢包 → 只重传 base 包（window[0]）
+    窗口其余包保持状态，等待后续 ACK 推进
+
+  备份机制 ─ 超时重传（兜底）:
+    300ms 内未收到任何 ACK → GBN 回退 N 步
+    重传窗口内所有未确认包
+
+  适用场景:
+    单个丢包 → 快重传快速恢复（无需等待超时）
+    连续丢包/窗口全丢 → 超时重传兜底
+
+八、服务器命令行参数
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  --port        端口号（必需）                示例: --port 8888
+  --loss_rate   模拟丢包率（可选，默认 0.3）   示例: --loss_rate 0.2
+  --seed        随机数种子（可选，用于复现）    示例: --seed 42
 
   启动示例:
-    python3 udpserver.py --port 8888 --loss_rate 0.2
+    python3 udpserver.py --port 8888 --loss_rate 0.2 --seed 42
 
-六、客户端命令行参数
+  服务端启动后会自动显示本机 IP 和端口提示。
+
+九、客户端命令行参数
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  --ip            服务器 IP 地址（必需）          示例: --ip 127.0.0.1
-  --port          服务器端口号（必需）            示例: --port 8888
-  --student_id    学号（可选，默认 2110）         示例: --student_id 2110
-  --file          数据文件路径（可选，默认随机生成）示例: --file test.txt
+  --ip            服务器 IP 地址（必需）               示例: --ip 127.0.0.1
+  --port          服务器端口号（必需）                 示例: --port 8888
+  --student_id    学号（可选，默认 2110）              示例: --student_id 2110
+  --file          数据文件路径（可选，默认随机生成）     示例: --file test.txt
+  --timeout       超时时间秒（可选，默认 0.3）          示例: --timeout 0.5
+  --window_size   发送窗口大小字节（可选，默认 400）     示例: --window_size 400
+  --data_min      单包数据最小长度（可选，默认 40）      示例: --data_min 40
+  --data_max      单包数据最大长度（可选，默认 80）      示例: --data_max 80
+  --total_packets 总数据包数（可选，默认 30）           示例: --total_packets 30
+  --seed          数据块生成随机种子（可选，默认 42）    示例: --seed 42
 
   启动示例:
     python3 udpclient.py --ip 127.0.0.1 --port 8888 --student_id 2110 --file test.txt
 
-七、GBN 滑动窗口机制说明
+十、GBN 滑动窗口机制说明
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  客户端常量（在代码中定义）：
-    WINDOW_SIZE_BYTES = 400   （发送窗口大小，以字节计）
-    TIMEOUT           = 0.3   （超时重传时间，秒）
-    TOTAL_PACKETS     = 30    （数据包总数）
-    DATA_LEN_MIN      = 40    （每包最小字节数）
-    DATA_LEN_MAX      = 80    （每包最大字节数）
+  默认参数：
+    发送窗口大小    = 400 字节（含 13B 头部）
+    超时时间        = 0.3 秒
+    数据包总数      = 30
+    单包数据长度    = 40 ~ 80 字节（随机）
+    最大重试次数    = 15
 
-  1. 窗口大小：以字节计数，最大 400 字节未确认数据
+  1. 窗口以字节计数，含 13B 头部（data + 13 ≤ 400）
   2. 发送过程：
-     - 窗口未满时连续发送新包
-     - 收到 ACK 后滑动窗口（累积确认，所有序号 < ack 的包均视为已确认）
-     - 超时（300ms）则重传窗口内所有未确认包
-  3. 连接建立：客户端循环发送 Type=0 请求，超时则重发，直到收到 Type=1 确认为止
-  4. 共发送 30 个数据包（TOTAL_PACKETS = 30）
-  5. 每包数据长度在 40~80 字节间随机
+     - 窗口未满时连续发送新包（新包加入前检查 inflight + 新包总长 ≤ 窗口）
+     - 收到 ACK 后滑动窗口（累积确认，所有序号 < ack 的包均已确认）
+     - 收到 3 次重复 ACK → 快重传（重传 base 包）
+     - 超时（300ms）→ 回退 N 步（重传窗口内所有包）
+  3. 接收窗口 = 1，仅按序到达的包被接收，乱序丢弃
+  4. 窗口大小最小值受 data_min + HEADER_LEN 约束
 
-八、运行步骤
+十一、运行步骤
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. 先在一个终端启动服务器：
+  1. 先在一个终端启动服务器（host os / guest os 均可）：
      python3 udpserver.py --port 8888 --loss_rate 0.2
 
-  2. 在另一个终端启动客户端：
-     python3 udpclient.py --ip 127.0.0.1 --port 8888 --student_id 2110 --file test.txt
+  2. 在另一个终端启动客户端（与服务器在不同机器时为 guest 的 IP）：
+     python3 udpclient.py --ip 192.168.x.x --port 8888 --student_id 2110 --file test.txt
 
   3. 运行结束后，客户端会输出统计信息：
      - 实际发送总包数（含重传）
-     - 丢包率
-     - 最大/最小/平均 RTT 及 RTT 标准差
-     - 同时生成 run_log_udp.txt 通信日志
+     - 丢包率（= 30 / send_total × 100%）
+     - 最大 / 最小 / 平均 RTT 及 RTT 标准差（使用 pandas 计算）
+     - 同时生成 run_log.txt 通信日志
 
-九、日志格式
+十二、日志格式
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   [时间] 事件类型 | Type=报文类型 | Seq=序列号 | Ack=确认号 | Length=数据长度 | Address=对端地址 [ | RTT=xx.x ms]
 
+  时间戳格式: YYYY-MM-DD HH:MM:SS.sss（毫秒精度，可与 Wireshark 印证）
+
   事件类型说明：
-    send packet        — 发送数据包
-    receive packet     — 接收数据包
-    retransmit         — 超时重传
-    timeout            — 发生超时（客户端日志）
-    drop               — 模拟丢包（服务器日志，不回复 ACK）
-    connection established — 建立连接
-    connection closed  — 关闭连接
+    send packet       — 发送数据包
+    receive packet    — 接收数据包
+    retransmit        — 超时重传
+    fast retransmit   — 快重传（客户端收到 3 次重复 ACK 触发）
+    timeout           — 发生超时（客户端日志）
+    drop              — 模拟丢包（服务器日志，不回复 ACK）
+    parse error       — 报文解析失败（服务器日志）
+    connection closed — 连接关闭
 
   示例:
-  [2026-06-05 10:30:15.123] send packet | Type=2 | Seq=0 | Ack=0 | Length=55 | Address=('127.0.0.1', 8888)
-  [2026-06-05 10:30:15.200] drop | Type=2 | Seq=1 | Ack=0 | Length=60 | Address=('127.0.0.1', 54321)
-  [2026-06-05 10:30:15.456] receive packet | Type=3 | Seq=0 | Ack=1 | Length=0 | Address=('127.0.0.1', 8888) | RTT=12.3 ms
-  [2026-06-05 10:30:15.789] timeout | Type=- | Seq=0 | Ack=0 | Length=0 | Address=('127.0.0.1', 8888)
-  [2026-06-05 10:30:15.790] retransmit | Type=2 | Seq=5 | Ack=0 | Length=60 | Address=('127.0.0.1', 8888)
+  [2026-06-10 10:30:15.123] send packet | Type=2 | Seq=0 | Ack=0 | Length=55 | Address=('127.0.0.1', 8888)
+  [2026-06-10 10:30:15.200] drop | Type=2 | Seq=1 | Ack=0 | Length=60 | Address=('127.0.0.1', 54321)
+  [2026-06-10 10:30:15.456] receive packet | Type=3 | Seq=0 | Ack=1 | Length=0 | Address=('127.0.0.1', 8888) | RTT=12.3 ms
+  [2026-06-10 10:30:15.789] timeout | Type=- | Seq=0 | Ack=0 | Length=0 | Address=('127.0.0.1', 8888)
+  [2026-06-10 10:30:15.790] fast retransmit | Type=2 | Seq=5 | Ack=0 | Length=60 | Address=('127.0.0.1', 8888)
