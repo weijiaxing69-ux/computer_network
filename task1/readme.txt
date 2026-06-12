@@ -20,6 +20,7 @@
     • 通过 TCP 连接依次发送每个数据块到服务器
     • 接收服务器反转后的数据块，按序重组并保存为新文件
     • 使用固定随机种子（seed），保证拆分结果可复现
+    • 按 seed 生成独立的客户端运行日志（run_log_client_seed{seed}.txt）
 
   服务器：
     • 监听指定端口（0.0.0.0，即所有网络接口），接收 TCP 连接
@@ -30,11 +31,12 @@
 
 三、文件说明
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  reversetcpserver.py    — TCP 服务器程序
-  reversetcpclient.py    — TCP 客户端程序
-  test.txt               — 测试用文本文件
-  run_log.txt            — 运行日志（程序自动生成）
-  readme.txt             — 本说明文档
+  reversetcpserver.py              — TCP 服务器程序
+  reversetcpclient.py              — TCP 客户端程序
+  test.txt                         — 测试用文本文件
+  run_log.txt                      — 服务器端运行日志（程序自动生成）
+  run_log_client_seed*.txt         — 客户端运行日志（每个 seed 对应一个独立的日志文件，程序自动生成）
+  readme.txt                       — 本说明文档
 
 四、服务器命令行参数
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -64,8 +66,9 @@
      python3 reversetcpclient.py --server-ip 127.0.0.1 --server-port 12345 --lmin 5 --lmax 15 --file test.txt --seed 42
 
   3. 运行结束后，会在当前目录生成：
-     - test_reversed.txt（反转后的文件）
-     - run_log.txt（通信过程日志）
+     - test_reversed_seed42.txt（反转后的文件，文件名中包含 seed 值以确保不冲突）
+     - run_log.txt（服务器端通信过程日志）
+     - run_log_client_seed42.txt（客户端通信过程日志，以 seed 区分不同客户端）
 
 七、自定义协议格式
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -88,6 +91,11 @@
 八、日志格式
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   [时间] 事件类型 | Type=报文类型 | Length=数据长度 | Preview=数据预览(前20字符) | Address=对端地址
+
+  注：Address 字段记录的是当前事件中"对方"的地址：
+  - 发送报文（send packet）时：填写的是发送方自身的地址
+  - 接收报文（receive packet）时：填写的是发送该报文的对端地址
+  - 连接建立/关闭时：填写的是对端的地址
 
   示例:
   [2026-06-05 10:30:15.123] connection established | Type=- | Length=0 | Preview= | Address=('127.0.0.1', 12345)
