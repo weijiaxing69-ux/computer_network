@@ -18,7 +18,7 @@ import pandas as pd
     断开请求	FIN	        Type=4
     断开确认  FIN+ACK	    Type=5
 """
-FILE_NAME = 'run_log.txt'
+FILE_NAME = 'client_run_log.txt'
 XOR_KEY = 0x5A3C
 WINDOW_SIZE_BYTES = 400    # 发送窗口 400 字节（含13B头部，数据部分上限387B）
 TIMEOUT = 0.3          # 超时时间 300ms（可通过命令行覆盖）

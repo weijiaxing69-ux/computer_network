@@ -18,7 +18,7 @@ import os
     断开请求	FIN	        Type=4
     断开确认  FIN+ACK	    Type=5
 """
-FILE_NAME = 'run_log.txt'
+FILE_NAME = 'server_run_log.txt'
 XOR_KEY = 0x5A3C
 IP='0.0.0.0'
 HEADER_LEN = 13
