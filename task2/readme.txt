@@ -19,7 +19,8 @@
   udpserver.py            — UDP GBN 服务器程序
   udpclient.py            — UDP GBN 客户端程序
   test.txt                — 测试用文本文件
-  run_log.txt             — 运行日志（程序自动生成）
+  client_run_log.txt      — 客户端运行日志（程序自动生成）
+  server_run_log.txt      — 服务端运行日志（程序自动生成）
   received_{ip}_{port}.bin — 服务端保存的接收数据（程序自动生成）
   readme.txt              — 本说明文档
 
@@ -120,19 +121,19 @@
 
 九、客户端命令行参数
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  --ip            服务器 IP 地址（必需）               示例: --ip 127.0.0.1
-  --port          服务器端口号（必需）                 示例: --port 8888
-  --student_id    学号（可选，默认 2110）              示例: --student_id 2110
-  --file          数据文件路径（可选，默认随机生成）     示例: --file test.txt
-  --timeout       超时时间秒（可选，默认 0.3）          示例: --timeout 0.5
-  --window_size   发送窗口大小字节（可选，默认 400）     示例: --window_size 400
-  --data_min      单包数据最小长度（可选，默认 40）      示例: --data_min 40
-  --data_max      单包数据最大长度（可选，默认 80）      示例: --data_max 80
-  --total_packets 总数据包数（可选，默认 30）           示例: --total_packets 30
-  --seed          数据块生成随机种子（可选，默认 42）    示例: --seed 42
+  --server_ip     服务器 IP 地址（必需）                    示例: --server_ip 127.0.0.1
+  --server_port   服务器端口号（必需）                      示例: --server_port 8888
+  --student_id    学号（可选，默认 2110）                   示例: --student_id 2110
+  --file          数据文件路径（可选，默认随机生成）          示例: --file test.txt
+  --timeout       超时时间秒（可选，默认 0.3）               示例: --timeout 0.5
+  --window_size   发送窗口大小字节（可选，默认 400）          示例: --window_size 400
+  --data_min      单包数据最小长度（可选，默认 40）           示例: --data_min 40
+  --data_max      单包数据最大长度（可选，默认 80）           示例: --data_max 80
+  --total_packets 总数据包数（可选，默认 30）                示例: --total_packets 30
+  --seed          数据块生成随机种子（可选，默认 42）         示例: --seed 42
 
   启动示例:
-    python3 udpclient.py --ip 127.0.0.1 --port 8888 --student_id 2110 --file test.txt
+    python3 udpclient.py --server_ip 127.0.0.1 --server_port 8888 --student_id 2110 --file test.txt
 
 十、GBN 滑动窗口机制说明
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -158,13 +159,13 @@
      python3 udpserver.py --port 8888 --loss_rate 0.2
 
   2. 在另一个终端启动客户端（与服务器在不同机器时为 guest 的 IP）：
-     python3 udpclient.py --ip 192.168.x.x --port 8888 --student_id 2110 --file test.txt
+     python3 udpclient.py --server_ip 192.168.x.x --server_port 8888 --student_id 2110 --file test.txt
 
   3. 运行结束后，客户端会输出统计信息：
      - 实际发送总包数（含重传）
      - 丢包率（= 30 / send_total × 100%）
      - 最大 / 最小 / 平均 RTT 及 RTT 标准差（使用 pandas 计算）
-     - 同时生成 run_log.txt 通信日志
+     - 同时生成 client_run_log.txt（客户端通信日志）和 server_run_log.txt（服务端通信日志）
 
 十二、日志格式
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
